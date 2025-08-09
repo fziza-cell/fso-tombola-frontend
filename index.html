@@ -1,0 +1,119 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>FSO Tombola</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b0f15;color:#e8edf2;margin:0}.container{max-width:960px;margin:0 auto;padding:20px}.row{display:flex;gap:12px;align-items:center}.card{background:#121824;border:1px solid #1d2431;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25)}.pill{background:#182133;border:1px solid #253149;padding:4px 10px;border-radius:999px;font-size:12px;color:#b8c4da}input,button{font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid #2a3446;background:#0f1521;color:#e8edf2}button{cursor:pointer}label{font-size:14px;color:#aab8d0;width:120px;display:inline-block}.grid{display:grid;gap:16px}.two{grid-template-columns:1fr 1fr}.muted{color:#95a2b8;font-size:12px}.title{font-size:22px;font-weight:600}</style></head><body><div class="container"><div class="row" style="justify-content:space-between;margin-bottom:16px"><div class="title">FSO Tombola</div><div class="pill">GitHub Pages + Google Sheets</div></div><div class="grid two"><div class="card"><div class="grid"><div class="row"><label>Name</label><input id="name" placeholder="Player name"/></div><div class="row"><label>Phone</label><input id="phone" placeholder="06xxxxxxxx"/></div><div class="row"><input type="checkbox" id="consent" checked/> <span class="muted">I agree to the terms</span></div><button id="btn">Start draw</button><div id="result" class="pill" style="margin-top:8px;display:none"></div></div></div><div class="card"><div id="wheelContainer" style="display:flex;justify-content:center;align-items:center"></div></div></div><div class="muted" style="margin-top:16px">Admin tip: open the Google Sheet to see Remaining change live on each draw.</div></div><script>
+const ENDPOINT_URL="APPS_SCRIPT_WEB_APP_URL";
+let segments=[];
+async function fetchPrizes(){
+  const r=await fetch(ENDPOINT_URL+"?action=getPrizes");
+  const j=await r.json();
+  segments=j.prizes.filter(p=>p.isActive).sort((a,b)=>a.order-b.order).map(p=>({id:p.id,label:p.label}));
+  renderWheel();
+}
+function renderWheel(){
+  const cont=document.getElementById('wheelContainer');
+  cont.innerHTML='';
+  if(!segments.length){
+    cont.textContent='No prizes found – check your Google Sheet.';
+    return;
+  }
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width','420');
+  svg.setAttribute('height','420');
+  svg.setAttribute('viewBox','0 0 100 100');
+  svg.style.transition='transform 4.5s cubic-bezier(.17,.67,.16,1)';
+  const slice=360/segments.length;
+  const colors=['#1b2433','#0f1521'];
+  segments.forEach((seg,i)=>{
+    const start=(i*slice)*Math.PI/180;
+    const end=((i+1)*slice)*Math.PI/180;
+    const large=end-start>Math.PI?1:0;
+    const x1=50+50*Math.cos(start),y1=50+50*Math.sin(start),x2=50+50*Math.cos(end),y2=50+50*Math.sin(end);
+    const d=`M50 50 L ${x1} ${y1} A 50 50 0 ${large} 1 ${x2} ${y2} Z`;
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',d);
+    path.setAttribute('fill',colors[i%colors.length]);
+    path.setAttribute('stroke','#253149');
+    path.setAttribute('stroke-width','0.3');
+    g.appendChild(path);
+    const text=document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x','50');
+    text.setAttribute('y','50');
+    text.setAttribute('fill','#cbd6ea');
+    text.setAttribute('font-size','3.5');
+    text.setAttribute('text-anchor','middle');
+    text.setAttribute('alignment-baseline','middle');
+    text.setAttribute('transform',`rotate(${i*slice+slice/2},50,50) translate(0,-30)`);
+    text.textContent=seg.label;
+    g.appendChild(text);
+    svg.appendChild(g);
+  });
+  const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('cx','50');
+  dot.setAttribute('cy','50');
+  dot.setAttribute('r','3.2');
+  dot.setAttribute('fill','#a4c2ff');
+  svg.appendChild(dot);
+  const pointer=document.createElement('div');
+  pointer.textContent='▼';
+  pointer.style.position='absolute';
+  pointer.style.top='-6px';
+  pointer.style.left='50%';
+  pointer.style.transform='translateX(-50%)';
+  pointer.style.fontSize='22px';
+  const wrap=document.createElement('div');
+  wrap.style.position='relative';
+  wrap.style.width='420px';
+  wrap.style.height='420px';
+  wrap.appendChild(pointer);
+  wrap.appendChild(svg);
+  cont.appendChild(wrap);
+  window.__wheel=svg;
+}
+function spinTo(i){
+  const svg=window.__wheel;
+  if(!svg)return;
+  const slice=360/segments.length;
+  const target=(segments.length-i)*slice - slice/2;
+  const spins=6*360;
+  const jitter=Math.floor(Math.random()*10)-5;
+  svg.style.transform=`rotate(${spins+target+jitter}deg)`;
+}
+async function draw(){
+  const btn=document.getElementById('btn');
+  const name=document.getElementById('name').value.trim();
+  const phone=document.getElementById('phone').value.trim();
+  const consent=document.getElementById('consent').checked;
+  const result=document.getElementById('result');
+  result.style.display='none';
+  if(!consent){
+    alert('Consent required');
+    return;
+  }
+  if(!name||!phone){
+    alert('Name and phone required');
+    return;
+  }
+  btn.disabled=true;
+  try{
+    const r=await fetch(ENDPOINT_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'draw',name,phone,deviceId:'web'})
+    });
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||'Failed');
+    const idx=segments.findIndex(s=>s.id===j.prizeId);
+    if(idx>=0)spinTo(idx);
+    setTimeout(()=>{
+      result.textContent='Won: '+j.prizeLabel;
+      result.style.display='inline-block';
+      fetchPrizes();
+    },4700);
+  }catch(e){
+    alert(e.message||e);
+  }finally{
+    setTimeout(()=>btn.disabled=false,4800);
+  }
+}
+document.getElementById('btn').addEventListener('click',draw);
+fetchPrizes();
+</script></body></html>
