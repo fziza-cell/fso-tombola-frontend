@@ -16,3 +16,6 @@ The frontend fetches data from the backend via a secret called `WEBAPP_URL`. Whe
 - Ensure the `WEBAPP_URL` secret is correct and includes the trailing `/exec`; without this the frontend will fail to fetch prizes or post draws.
 - Prize stock and visibility are controlled in the Google Sheet. You can edit quantities or deactivate a prize by setting `isActive` to `FALSE` in the `Prizes` sheet.
 - If the wheel shows “No prizes found,” check that the `Prizes` tab exists with the proper headers and that prizes are marked as active with remaining quantity.
+
+
+
